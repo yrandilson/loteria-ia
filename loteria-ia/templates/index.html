@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loteria IA</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f5f3;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --muted: #6b6b67;
+    --green: #3B6D11;
+    --green-light: #EAF3DE;
+    --green-text: #27500A;
+    --blue: #185FA5;
+    --blue-light: #E6F1FB;
+    --blue-text: #042C53;
+    --amber: #BA7517;
+    --amber-light: #FAEEDA;
+    --amber-text: #412402;
+    --red: #A32D2D;
+    --red-light: #FCEBEB;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #242422;
+      --border: rgba(255,255,255,0.1);
+      --text: #f0ede8;
+      --muted: #8c8c88;
+      --green-light: #173404;
+      --green-text: #C0DD97;
+      --blue-light: #042C53;
+      --blue-text: #B5D4F4;
+      --amber-light: #412402;
+      --amber-text: #FAC775;
+      --red-light: #501313;
+      --red-text: #F7C1C1;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  /* Layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  .main { flex: 1; padding: 2rem; overflow-y: auto; }
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .logo-icon { width: 36px; height: 36px; background: var(--green); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo-text { font-size: 15px; font-weight: 600; }
+  .logo-sub  { font-size: 11px; color: var(--muted); }
+
+  /* Nav */
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--muted); font-size: 13px; transition: all .15s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--bg); color: var(--text); }
+  .nav-item.active { background: var(--green-light); color: var(--green-text); font-weight: 500; }
+  .nav-icon { font-size: 16px; width: 20px; }
+  .nav-section { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 12px 10px 4px; }
+
+  /* Loteria selector */
+  .lot-toggle { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: var(--radius); margin-bottom: 1.5rem; }
+  .lot-btn { flex: 1; padding: 6px; border: none; background: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); transition: all .15s; }
+  .lot-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: .25rem; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-bottom: 1.5rem; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 14px; font-weight: 500; margin-bottom: 1rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1rem; }
+
+  /* Metrics */
+  .metric { background: var(--bg); border-radius: var(--radius-sm); padding: .875rem; text-align: center; }
+  .metric-val { font-size: 22px; font-weight: 600; }
+  .metric-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Bolas */
+  .bolas { display: flex; flex-wrap: wrap; gap: 8px; margin: .75rem 0; }
+  .bola { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform .1s; user-select: none; }
+  .bola-mega  { background: #97C459; color: #173404; }
+  .bola-lotof { background: #378ADD; color: #042C53; }
+  .bola-hot   { background: #E24B4A; color: #501313; }
+  .bola-cold  { background: #85B7EB; color: #042C53; }
+  .bola-neutral { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .bola:hover { transform: scale(1.1); }
+  .bola.sel   { transform: scale(1.15); outline: 3px solid var(--green); }
+
+  /* Botões */
+  .btn { padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text); transition: all .15s; }
+  .btn:hover { background: var(--bg); }
+  .btn-green  { background: var(--green); color: #EAF3DE; border-color: var(--green); }
+  .btn-green:hover  { background: var(--green-text); }
+  .btn-blue   { background: var(--blue); color: #E6F1FB; border-color: var(--blue); }
+  .btn-blue:hover   { background: var(--blue-text); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Form */
+  select, input[type=range], input[type=number], input[type=text] {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 7px 10px; font-size: 13px;
+    background: var(--surface); color: var(--text);
+  }
+  input[type=range] { padding: 0; flex: 1; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+  .form-group { display: flex; flex-direction: column; }
+
+  /* Badges */
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+  .badge-green  { background: var(--green-light); color: var(--green-text); }
+  .badge-blue   { background: var(--blue-light); color: var(--blue-text); }
+  .badge-amber  { background: var(--amber-light); color: var(--amber-text); }
+  .badge-red    { background: var(--red-light); color: var(--red); }
+
+  /* Frequência */
+  .freq-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .freq-num-circle { width: 26px; height: 26px; border-radius: 50%; background: var(--green-light); color: var(--green-text); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .freq-track { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .freq-fill  { height: 100%; border-radius: 3px; background: var(--green); }
+  .freq-count { font-size: 11px; color: var(--muted); min-width: 30px; text-align: right; }
+
+  /* Heatmap */
+  #heatmap { display: flex; flex-wrap: wrap; gap: 4px; }
+  .hm-cell { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+  .chart-grid { display: grid; grid-template-columns: 1.3fr .9fr; gap: 1rem; margin-top: 1rem; }
+  .chart-box { position: relative; min-height: 280px; }
+  .chart-box canvas { width: 100% !important; height: 280px !important; }
+
+  /* Tabela */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 500; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+
+  /* Info box */
+  .info-box { border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+  .info-amber { background: var(--amber-light); color: var(--amber-text); border-left: 3px solid var(--amber); }
+
+  /* Jogo card */
+  .jogo-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: .75rem; }
+  .jogo-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+  .jogo-meta { font-size: 11px; color: var(--muted); }
+
+  /* Progress */
+  .prog-bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 4px 0 12px; }
+  .prog-fill { height: 100%; border-radius: 3px; }
+
+  /* Loading */
+  .loading { display: none; text-align: center; padding: 2rem; color: var(--muted); }
+  .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; margin-bottom: .5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--text); color: var(--surface); padding: 10px 18px; border-radius: var(--radius-sm); font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+
+  @media (max-width: 700px) {
+    .sidebar { display: none; }
+    .main { padding: 1rem; }
+    .grid4 { grid-template-columns: 1fr 1fr; }
+    .grid2, .grid3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🎰</div>
+      <div>
+        <div class="logo-text">Loteria IA</div>
+        <div class="logo-sub">v1.0 · local</div>
+      </div>
+    </div>
+
+    <div class="nav-section">Menu</div>
+    <button class="nav-item active" onclick="showPanel('gerar')"><span class="nav-icon">✨</span> Gerar Jogos</button>
+    <button class="nav-item" onclick="showPanel('meus')"><span class="nav-icon">📋</span> Meus Jogos</button>
+    <button class="nav-item" onclick="showPanel('analise')"><span class="nav-icon">📊</span> Análise IA</button>
+    <button class="nav-item" onclick="showPanel('simular')"><span class="nav-icon">🔁</span> Simulador</button>
+    <div class="nav-section">Sistema</div>
+    <button class="nav-item" onclick="showPanel('importar')"><span class="nav-icon">📥</span> Importar CSV</button>
+    <button class="nav-item" onclick="showPanel('sobre')"><span class="nav-icon">ℹ️</span> Sobre</button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Seletor de loteria -->
+    <div class="lot-toggle">
+      <button class="lot-btn active" onclick="setLoteria('mega', this)">🟢 Mega-Sena</button>
+      <button class="lot-btn" onclick="setLoteria('lotof', this)">🔵 Lotofácil</button>
+    </div>
+
+    <!-- ── GERAR ── -->
+    <div class="panel active" id="panel-gerar">
+      <div class="page-title">✨ Gerar Jogos</div>
+      <div class="page-sub">IA híbrida: K-Means + Frequência histórica + Filtros de qualidade</div>
+
+      <div class="card">
+        <div class="card-title">Configurações</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Quantidade de jogos</label>
+            <select id="g-qtd">
+              <option value="1">1 jogo</option>
+              <option value="3" selected>3 jogos</option>
+              <option value="5">5 jogos</option>
+              <option value="10">10 jogos</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Estratégia</label>
+            <select id="g-estrategia">
+              <option value="hibrido">Híbrido (Recomendado)</option>
+              <option value="profissional">Profissional (Equilibrado)</option>
+              <option value="frequencia">Só frequência</option>
+              <option value="aleatorio">Aleatório</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:180px">
+            <label>Peso da IA: <span id="g-peso-label">70%</span></label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="range" id="g-peso" min="0" max="100" value="70"
+                oninput="document.getElementById('g-peso-label').textContent=this.value+'%'">
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-green" onclick="gerarJogos(false)">✨ Gerar jogos</button>
+          <button class="btn btn-blue" onclick="gerarJogos(true)">💾 Gerar e salvar</button>
+        </div>
+      </div>
+
+      <div class="loading" id="load-gerar">
+        <div class="spinner"></div><br>Treinando modelo e gerando jogos...
+      </div>
+
+      <div id="resultado-gerar"></div>
+    </div>
+
+    <!-- ── MEUS JOGOS ── -->
+    <div class="panel" id="panel-meus">
+      <div class="page-title">📋 Meus Jogos</div>
+      <div class="page-sub">Jogos salvos no banco de dados local (SQLite)</div>
+      <button class="btn btn-green" onclick="carregarMeusJogos()" style="margin-bottom:1rem">🔄 Atualizar</button>
+      <div id="meus-jogos-lista">
+        <div class="loading" style="display:block"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- ── ANÁLISE ── -->
+    <div class="panel" id="panel-analise">
+      <div class="page-title">📊 Análise IA</div>
+      <div class="page-sub">Frequência, atraso e tendência dos resultados históricos</div>
+      <button class="btn btn-green" onclick="carregarAnalise()" style="margin-bottom:1rem">🔄 Carregar análise</button>
+      <div id="analise-content"></div>
+    </div>
+
+    <!-- ── SIMULADOR ── -->
+    <div class="panel" id="panel-simular">
+      <div class="page-title">🔁 Simulador Histórico</div>
+      <div class="page-sub">Teste seu jogo contra os resultados passados</div>
+
+      <div class="card">
+        <div class="card-title">Digite ou selecione seu jogo</div>
+        <div id="sim-bolas" class="bolas"></div>
+        <div class="form-row" style="margin-top:.5rem">
+          <input type="text" id="sim-input" placeholder="Ex: 5, 12, 23, 34, 45, 56" style="flex:1">
+          <button class="btn" onclick="aplicarInputSim()">Aplicar</button>
+          <button class="btn" onclick="gerarAleatorioSim()">🎲 Aleatório</button>
+        </div>
+        <button class="btn btn-blue" onclick="simular()" style="margin-top:.5rem">🔁 Simular histórico</button>
+      </div>
+
+      <div id="sim-resultado"></div>
+    </div>
+
+    <!-- ── IMPORTAR ── -->
+    <div class="panel" id="panel-importar">
+      <div class="page-title">📥 Importar / Sincronizar</div>
+      <div class="page-sub">Importe CSV ou puxe o histórico completo direto da Caixa</div>
+
+      <div class="card">
+        <p style="color:var(--muted);margin-bottom:1rem;line-height:1.7">
+          Baixe o histórico em <strong>loterias.caixa.gov.br</strong> → selecione a loteria → Exportar planilha.<br>
+          Salve como <code>.csv</code> e importe aqui.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Loteria do arquivo</label>
+            <select id="imp-loteria"><option value="mega">Mega-Sena</option><option value="lotof">Lotofácil</option></select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>Arquivo CSV</label>
+            <input type="file" id="imp-arquivo" accept=".csv" style="padding:6px">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-green" onclick="importarCSV()">📥 Importar CSV</button>
+          <button class="btn btn-blue" onclick="sincronizarCaixa()">🔄 Sincronizar histórico completo</button>
+        </div>
+        <div id="imp-resultado" style="margin-top:1rem"></div>
+      </div>
+    </div>
+
+    <!-- ── SOBRE ── -->
+    <div class="panel" id="panel-sobre">
+      <div class="page-title">ℹ️ Sobre o Sistema</div>
+      <div class="page-sub">Arquitetura e aviso importante</div>
+
+      <div class="card">
+        <div class="card-title">Arquitetura do modelo híbrido</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:20px">1️⃣</div>
+            <div><strong>Pré-processamento</strong> — CSV histórico → vetores binários (1 se número saiu, 0 se não)</div>
+          </div>
+          <div style="text-align:center;color:var(--muted)">↓</div>
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:20px">2️⃣</div>
+            <div><strong>K-Means Clustering</strong> — Agrupa padrões em 5–8 clusters. Cada sorteio pertence a um grupo com centroide representativo.</div>
+          </div>
+          <div style="text-align:center;color:var(--muted)">↓</div>
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:20px">3️⃣</div>
+            <div><strong>Pesos dinâmicos</strong> — Centroide do cluster + frequência histórica × peso configurável.</div>
+          </div>
+          <div style="text-align:center;color:var(--muted)">↓</div>
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:20px">4️⃣</div>
+            <div><strong>Filtros de qualidade</strong> — Remove sequências longas, jogos com todos pares, concentração em faixas ruins.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <div class="card-title">Ideias avançadas e estratégias reais</div>
+        <div class="grid2">
+          <div class="info-box" style="background:var(--bg)">
+            <strong>IA / Machine Learning</strong><br>
+            Modelo que tenta prever distribuição.<br>
+            Clusterização de jogos para identificar perfis semelhantes.
+          </div>
+          <div class="info-box" style="background:var(--bg)">
+            <strong>Dashboard</strong><br>
+            Gráficos com frequência, atraso e tendência para leitura rápida.
+          </div>
+          <div class="info-box" style="background:var(--bg)">
+            <strong>Estratégias reais</strong><br>
+            Misturar pares/ímpares, evitar sequências longas e distribuir entre baixos e altos.
+          </div>
+          <div class="info-box" style="background:var(--bg)">
+            <strong>Consistência</strong><br>
+            Não repetir sempre os mesmos números e manter padrão de jogo ao longo do tempo.
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box info-amber" style="margin-top:1rem">
+        <strong>⚠️ Aviso importante:</strong> A Mega-Sena tem mais de 50 milhões de combinações possíveis.
+        Cada sorteio é independente e aleatório. A IA <em>não prevê</em> resultados — ela melhora distribuição,
+        consistência e estratégia. Jogue com responsabilidade e dentro do seu orçamento.
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+let LOTERIA = 'mega';
+let simJogo = [];
+let analysisCharts = {};
+
+// ─── Navegação ────────────────────────────────────────────────────────────────
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (id === 'meus') carregarMeusJogos();
+  if (id === 'analise') carregarAnalise();
+  if (id === 'simular') renderSimBolas();
+}
+
+function setLoteria(lot, btn) {
+  LOTERIA = lot;
+  document.querySelectorAll('.lot-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  simJogo = [];
+  renderSimBolas();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function destroyAnalysisCharts() {
+  Object.values(analysisCharts).forEach(chart => chart.destroy());
+  analysisCharts = {};
+}
+
+function createAnalysisCharts(d) {
+  destroyAnalysisCharts();
+
+  const freqItems = Object.entries(d.frequencias).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const topFreq = freqItems.sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const atrasos = d.mais_atrasados.slice(0, 12).slice().reverse();
+  const tendencia = [...d.mais_tendencia.slice(0, 6).map(([n, t]) => [`+${n}`, t]), ...d.menos_tendencia.slice(0, 6).map(([n, t]) => [`-${n}`, Math.abs(t)])];
+
+  analysisCharts.frequency = new Chart(document.getElementById('freqChart'), {
+    type: 'bar',
+    data: {
+      labels: topFreq.map(([n]) => n),
+      datasets: [{
+        label: 'Frequência',
+        data: topFreq.map(([, f]) => f),
+        backgroundColor: '#3B6D11',
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
+
+  analysisCharts.delay = new Chart(document.getElementById('delayChart'), {
+    type: 'bar',
+    data: {
+      labels: atrasos.map(([n]) => n),
+      datasets: [{
+        label: 'Atraso',
+        data: atrasos.map(([, a]) => a),
+        backgroundColor: '#BA7517',
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  analysisCharts.trend = new Chart(document.getElementById('trendChart'), {
+    type: 'doughnut',
+    data: {
+      labels: tendencia.map(([n]) => n),
+      datasets: [{
+        data: tendencia.map(([, v]) => v),
+        backgroundColor: tendencia.map(([n]) => n.startsWith('+') ? '#3B6D11' : '#A32D2D'),
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      cutout: '62%'
+    }
+  });
+}
+
+// ─── Bolas ────────────────────────────────────────────────────────────────────
+function renderBolas(nums, classe) {
+  return `<div class="bolas">${nums.map(n => `<div class="bola ${classe}">${n}</div>`).join('')}</div>`;
+}
+
+// ─── Gerar Jogos ─────────────────────────────────────────────────────────────
+async function gerarJogos(salvar) {
+  const qtd = parseInt(document.getElementById('g-qtd').value);
+  const estrategia = document.getElementById('g-estrategia').value;
+  const peso_ia = parseInt(document.getElementById('g-peso').value);
+
+  document.getElementById('load-gerar').style.display = 'block';
+  document.getElementById('resultado-gerar').innerHTML = '';
+
+  try {
+    const r = await fetch('/api/gerar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ loteria: LOTERIA, qtd, estrategia, peso_ia, salvar })
+    });
+    const data = await r.json();
+    document.getElementById('load-gerar').style.display = 'none';
+
+    const cls = LOTERIA === 'mega' ? 'bola-mega' : 'bola-lotof';
+    const html = data.jogos.map((j, i) => `
+      <div class="jogo-card">
+        <div class="jogo-header">
+          <span style="font-size:13px;font-weight:500">Jogo ${i+1}</span>
+          <div style="display:flex;gap:6px">
+            <span class="badge badge-${LOTERIA==='mega'?'green':'blue'}">${LOTERIA==='mega'?'Mega-Sena':'Lotofácil'}</span>
+            <span class="badge badge-amber">${estrategia}</span>
+            <button class="btn" style="padding:3px 10px;font-size:11px" onclick="salvarJogo(${JSON.stringify(j)}, '${estrategia}')">💾 Salvar</button>
+          </div>
+        </div>
+        ${renderBolas(j, cls)}
+      </div>
+    `).join('');
+
+    document.getElementById('resultado-gerar').innerHTML = html;
+    if (salvar) toast(`✅ ${data.jogos.length} jogos salvos!`);
+  } catch(e) {
+    document.getElementById('load-gerar').style.display = 'none';
+    document.getElementById('resultado-gerar').innerHTML = '<p style="color:red">Erro ao gerar jogos.</p>';
+  }
+}
+
+async function salvarJogo(nums, estrategia) {
+  await fetch('/api/salvar_jogo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ loteria: LOTERIA, numeros: nums, estrategia })
+  });
+  toast('💾 Jogo salvo!');
+}
+
+// ─── Meus Jogos ───────────────────────────────────────────────────────────────
+async function carregarMeusJogos() {
+  const r = await fetch(`/api/meus_jogos?loteria=${LOTERIA}`);
+  const jogos = await r.json();
+  const cls = LOTERIA === 'mega' ? 'bola-mega' : 'bola-lotof';
+
+  if (jogos.length === 0) {
+    document.getElementById('meus-jogos-lista').innerHTML =
+      '<p style="color:var(--muted)">Nenhum jogo salvo ainda. Gere e salve jogos primeiro.</p>';
+    return;
+  }
+
+  document.getElementById('meus-jogos-lista').innerHTML = jogos.map(j => {
+    const nums = j.numeros.split(',').map(Number);
+    return `
+    <div class="jogo-card">
+      <div class="jogo-header">
+        <span style="font-size:13px;font-weight:500">#${j.id} · ${j.criado_em || '—'}</span>
+        <div style="display:flex;gap:6px">
+          <span class="badge badge-amber">${j.estrategia || 'manual'}</span>
+          <button class="btn" style="padding:3px 10px;font-size:11px;color:var(--red)"
+            onclick="deletarJogo(${j.id})">🗑️ Remover</button>
+        </div>
+      </div>
+      ${renderBolas(nums, cls)}
+    </div>`;
+  }).join('');
+}
+
+async function deletarJogo(id) {
+  await fetch('/api/deletar_jogo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id })
+  });
+  toast('🗑️ Jogo removido');
+  carregarMeusJogos();
+}
+
+// ─── Análise ──────────────────────────────────────────────────────────────────
+async function carregarAnalise() {
+  document.getElementById('analise-content').innerHTML =
+    '<div class="loading" style="display:block"><div class="spinner"></div></div>';
+
+  const r = await fetch(`/api/analise?loteria=${LOTERIA}`);
+  const d = await r.json();
+
+  const maxFreq = Math.max(...Object.values(d.frequencias));
+  const total   = d.total_sorteios;
+
+  // Heatmap
+  const heatCells = Object.entries(d.frequencias).map(([n, f]) => {
+    const pct = f / maxFreq;
+    const r_ = Math.round(59 + pct * 180);
+    const g_ = Math.round(180 - pct * 80);
+    const b_ = Math.round(100 - pct * 50);
+    const textColor = pct > 0.6 ? '#fff' : '#333';
+    return `<div class="hm-cell" title="Nº ${n}: ${f}x" style="background:rgb(${r_},${g_},${b_});color:${textColor}">${n}</div>`;
+  }).join('');
+
+  // Top 10 mais frequentes
+  const topBars = d.mais_frequentes.map(([n, f]) => `
+    <div class="freq-bar">
+      <div class="freq-num-circle">${n}</div>
+      <div class="freq-track"><div class="freq-fill" style="width:${(f/maxFreq*100).toFixed(0)}%"></div></div>
+      <div class="freq-count">${f}x</div>
+    </div>`).join('');
+
+  // Mais atrasados
+  const atrasados = d.mais_atrasados.map(([n, a]) =>
+    `<span class="badge badge-red" style="margin:2px">${n} (${a} atrás)</span>`).join('');
+
+  const tendenciaAlta = d.mais_tendencia.map(([n, t]) =>
+    `<span class="badge badge-green" style="margin:2px">${n} (${t > 0 ? '+' : ''}${t})</span>`).join('');
+
+  const tendenciaBaixa = d.menos_tendencia.map(([n, t]) =>
+    `<span class="badge badge-red" style="margin:2px">${n} (${t > 0 ? '+' : ''}${t})</span>`).join('');
+
+  document.getElementById('analise-content').innerHTML = `
+    <div class="grid4">
+      <div class="metric"><div class="metric-val">${total}</div><div class="metric-lbl">Sorteios</div></div>
+      <div class="metric"><div class="metric-val">${d.mais_frequentes[0]?.[0] || '—'}</div><div class="metric-lbl">Nº mais sorteado</div></div>
+      <div class="metric"><div class="metric-val">${d.menos_frequentes[0]?.[0] || '—'}</div><div class="metric-lbl">Nº menos sorteado</div></div>
+      <div class="metric"><div class="metric-val">${d.mais_atrasados[0]?.[0] || '—'}</div><div class="metric-lbl">Mais atrasado</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Mapa de calor — frequência histórica</div>
+      <div id="heatmap">${heatCells}</div>
+      <div style="display:flex;gap:16px;margin-top:.75rem;font-size:11px;color:var(--muted)">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;display:inline-block"></span>Mais frequente</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#97C459;display:inline-block"></span>Médio</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#85B7EB;display:inline-block"></span>Menos frequente</span>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">🔥 Top 10 mais frequentes</div>
+        ${topBars}
+      </div>
+      <div class="card">
+        <div class="card-title">⏳ Mais atrasados (sem sair)</div>
+        <p style="color:var(--muted);margin-bottom:.75rem;font-size:12px">Números que ficaram mais sorteios sem aparecer:</p>
+        ${atrasados}
+      </div>
+    </div>`;
+
+  document.getElementById('analise-content').innerHTML += `
+    <div class="chart-grid">
+      <div class="card chart-box">
+        <div class="card-title">📊 Frequência dos 12 números mais recorrentes</div>
+        <canvas id="freqChart"></canvas>
+      </div>
+      <div class="card chart-box">
+        <div class="card-title">⏳ Atraso dos números mais atrasados</div>
+        <canvas id="delayChart"></canvas>
+      </div>
+    </div>
+    <div class="card chart-box" style="margin-top:1rem">
+      <div class="card-title">📈 Tendência recente</div>
+      <canvas id="trendChart"></canvas>
+    </div>
+    <div class="grid2" style="margin-top:1rem">
+      <div class="card">
+        <div class="card-title">📈 Tendência em alta</div>
+        <p style="color:var(--muted);margin-bottom:.75rem;font-size:12px">Comparação dos últimos sorteios com a janela anterior.</p>
+        ${tendenciaAlta}
+      </div>
+      <div class="card">
+        <div class="card-title">📉 Tendência em baixa</div>
+        <p style="color:var(--muted);margin-bottom:.75rem;font-size:12px">Números com queda relativa na janela recente.</p>
+        ${tendenciaBaixa}
+      </div>
+    </div>`;
+
+  createAnalysisCharts(d);
+}
+
+// ─── Simulador ────────────────────────────────────────────────────────────────
+function getSimMax() { return LOTERIA === 'mega' ? 60 : 25; }
+function getSimQtd()  { return LOTERIA === 'mega' ? 6 : 15; }
+
+function renderSimBolas() {
+  const max = getSimMax();
+  const qtd = getSimQtd();
+  const cls = LOTERIA === 'mega' ? 'bola-mega' : 'bola-lotof';
+  let html = '';
+  for (let i = 1; i <= max; i++) {
+    const sel = simJogo.includes(i);
+    html += `<div class="bola bola-neutral ${sel ? 'sel' : ''}" onclick="toggleSimBola(${i})">${i}</div>`;
+  }
+  document.getElementById('sim-bolas').innerHTML = html;
+  document.getElementById('sim-input').value = simJogo.join(', ');
+}
+
+function toggleSimBola(n) {
+  const qtd = getSimQtd();
+  if (simJogo.includes(n)) {
+    simJogo = simJogo.filter(x => x !== n);
+  } else if (simJogo.length < qtd) {
+    simJogo.push(n);
+  } else {
+    toast(`Selecione exatamente ${qtd} números`);
+  }
+  renderSimBolas();
+}
+
+function aplicarInputSim() {
+  const raw = document.getElementById('sim-input').value;
+  simJogo = raw.split(/[,\s]+/).map(Number).filter(n => n >= 1 && n <= getSimMax());
+  renderSimBolas();
+}
+
+function gerarAleatorioSim() {
+  const max = getSimMax(), qtd = getSimQtd();
+  simJogo = [];
+  while (simJogo.length < qtd) {
+    const n = Math.ceil(Math.random() * max);
+    if (!simJogo.includes(n)) simJogo.push(n);
+  }
+  simJogo.sort((a, b) => a - b);
+  renderSimBolas();
+}
+
+async function simular() {
+  const qtd = getSimQtd();
+  if (simJogo.length !== qtd) { toast(`Selecione exatamente ${qtd} números`); return; }
+
+  document.getElementById('sim-resultado').innerHTML =
+    '<div class="loading" style="display:block"><div class="spinner"></div><br>Simulando...</div>';
+
+  const r = await fetch('/api/simular', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ loteria: LOTERIA, numeros: simJogo })
+  });
+  const data = await r.json();
+
+  const distHTML = Object.entries(data.distribuicao).sort((a,b)=>Number(b[0])-Number(a[0])).map(([ac, qt]) => `
+    <div class="freq-bar">
+      <span class="badge ${Number(ac)>=4?'badge-green':Number(ac)>=2?'badge-amber':'badge-red'}"
+        style="min-width:60px;text-align:center">${ac} acerto${ac!=1?'s':''}</span>
+      <div class="freq-track" style="flex:1"><div class="freq-fill" style="width:${(qt/data.resultados.length*100).toFixed(0)}%;background:${Number(ac)>=4?'#3B6D11':Number(ac)>=2?'#BA7517':'#A32D2D'}"></div></div>
+      <span class="freq-count">${qt}x</span>
+    </div>`).join('');
+
+  const tabelaHTML = data.resultados.slice(0, 15).map(r => {
+    const cls = LOTERIA === 'mega' ? 'bola-mega' : 'bola-lotof';
+    const bolinhas = r.resultado.map(n => {
+      const destaq = simJogo.includes(n);
+      return `<div class="bola ${destaq ? cls : 'bola-neutral'}" style="width:28px;height:28px;font-size:11px">${n}</div>`;
+    }).join('');
+    const acColor = r.acertos >= 4 ? 'green' : r.acertos >= 2 ? 'amber' : 'red';
+    return `<tr>
+      <td>${r.concurso}</td>
+      <td>${r.data}</td>
+      <td><div class="bolas" style="gap:4px">${bolinhas}</div></td>
+      <td><span class="badge badge-${acColor}">${r.acertos} acerto${r.acertos!==1?'s':''}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('sim-resultado').innerHTML = `
+    <div class="card">
+      <div class="card-title">Distribuição de acertos (${data.resultados.length} sorteios)</div>
+      ${distHTML}
+    </div>
+    <div class="card">
+      <div class="card-title">Últimos resultados comparados</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Concurso</th><th>Data</th><th>Números (verde = acerto)</th><th>Acertos</th></tr></thead>
+          <tbody>${tabelaHTML}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ─── Importar ────────────────────────────────────────────────────────────────
+async function importarCSV() {
+  const file = document.getElementById('imp-arquivo').files[0];
+  if (!file) { toast('Selecione um arquivo CSV'); return; }
+  const loteria = document.getElementById('imp-loteria').value;
+  const form = new FormData();
+  form.append('arquivo', file);
+  form.append('loteria', loteria);
+  const r = await fetch('/api/importar', { method: 'POST', body: form });
+  const d = await r.json();
+  document.getElementById('imp-resultado').innerHTML =
+    `<div class="info-box" style="background:var(--green-light);color:var(--green-text);border-left:3px solid var(--green)">
+      ✅ ${d.importados} resultados importados com sucesso!
+    </div>`;
+}
+
+async function sincronizarCaixa() {
+  const loteria = document.getElementById('imp-loteria').value;
+  const r = await fetch('/api/sincronizar_caixa', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ loteria, quantidade: 'all', modo: 'background' })
+  });
+  const d = await r.json();
+
+  if (!r.ok) {
+    document.getElementById('imp-resultado').innerHTML =
+      `<div class="info-box" style="background:var(--red-light);color:var(--red);border-left:3px solid var(--red)">
+        ❌ ${d.erro || 'Falha ao iniciar a sincronização'}
+      </div>`;
+    return;
+  }
+
+  document.getElementById('imp-resultado').innerHTML =
+    `<div class="info-box" style="background:var(--blue-light);color:var(--blue-text);border-left:3px solid var(--blue)">
+      ⏳ Sincronização iniciada em segundo plano. Job: ${d.job_id}
+    </div>`;
+
+  acompanharSincronizacao(d.job_id);
+}
+
+async function acompanharSincronizacao(jobId) {
+  const statusUrl = `/api/sincronizar_caixa/${jobId}`;
+  const timer = setInterval(async () => {
+    const r = await fetch(statusUrl);
+    const d = await r.json();
+
+    if (d.status === 'pending' || d.status === 'running') {
+      document.getElementById('imp-resultado').innerHTML =
+        `<div class="info-box" style="background:var(--blue-light);color:var(--blue-text);border-left:3px solid var(--blue)">
+          ⏳ Sincronizando histórico completo... status: ${d.status}
+        </div>`;
+      return;
+    }
+
+    clearInterval(timer);
+
+    if (d.status === 'error') {
+      document.getElementById('imp-resultado').innerHTML =
+        `<div class="info-box" style="background:var(--red-light);color:var(--red);border-left:3px solid var(--red)">
+          ❌ ${d.erro || 'Falha ao sincronizar com a Caixa'}
+        </div>`;
+      return;
+    }
+
+    const resultado = d.resultado || {};
+    document.getElementById('imp-resultado').innerHTML =
+      `<div class="info-box" style="background:var(--green-light);color:var(--green-text);border-left:3px solid var(--green)">
+        ✅ ${resultado.importados || 0} concursos sincronizados da Caixa. Último concurso: ${resultado.concurso_atual || '—'}.
+        Histórico: ${resultado.quantidade_solicitada === 'all' ? 'completo' : (resultado.quantidade_solicitada || '—')}.
+      </div>`;
+    toast('🔄 Caixa sincronizada');
+  }, 1500);
+}
+</script>
+</body>
+</html>
